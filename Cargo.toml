@@ -1,0 +1,11 @@
+[package]
+name = "generic-morph"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+frunk = "0.4.3"
+frunk_core = "0.4.3"
+
+[[example]]
+name = "stack_vm"
