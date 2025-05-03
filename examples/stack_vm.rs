@@ -19,18 +19,6 @@ struct CompState {
     trace: StackTopTrace,
 }
 
-impl AsMut<PC> for CompState {
-    fn as_mut(&mut self) -> &mut PC {
-        &mut self.pc
-    }
-}
-
-impl AsMut<Done> for CompState {
-    fn as_mut(&mut self) -> &mut Done {
-        &mut self.done
-    }
-}
-
 #[allow(unused)]
 enum Instruction {
     Push(u64),
@@ -42,13 +30,14 @@ enum Instruction {
     JumpI,
 }
 
-fn do_loop<S>(mut state: S, step: impl Fn(&mut S)) -> S
+fn do_loop<S, I>(mut state: S, step: impl Fn(&mut S)) -> S
 where
-    S: AsMut<Done>,
+    S: for<'a> Morph<'a, HListMut!['a, Done], I>,
 {
     loop {
         step(&mut state);
-        if state.as_mut().0 {
+        let (done,) = state.morph();
+        if done.0 {
             break state;
         }
     }
@@ -64,7 +53,7 @@ struct InstructionImpls<PUSH, ADD, MUL, STORE, LOAD, JUMP, JUMPI> {
     jumpi: JUMPI,
 }
 
-fn make_inst_selector<S>(
+fn make_inst_selector<S, I>(
     program: Vec<Instruction>,
     instrs: InstructionImpls<
         impl Fn(&mut S, u64),
@@ -77,17 +66,17 @@ fn make_inst_selector<S>(
     >,
 ) -> impl Fn(&mut S)
 where
-    S: AsMut<PC>,
-    S: AsMut<Done>,
+    S: for<'a> Morph<'a, HListMut!['a, PC, Done], I>,
 {
     move |state: &mut S| {
-        let pc: &mut PC = state.as_mut();
+        let (pc, _) = state.morph();
         let inst = pc.0;
         pc.0 += 1;
         use Instruction::*;
         match program.get(inst as usize) {
             None => {
-                AsMut::<Done>::as_mut(state).0 = true;
+                let (_, done) = state.morph();
+                done.0 = true;
             }
             Some(&Push(lit)) => (instrs.push)(state, lit),
             Some(Add) => (instrs.add)(state),
