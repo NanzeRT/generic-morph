@@ -1,5 +1,4 @@
 #![feature(trait_alias)]
-#![feature(impl_trait_in_assoc_type)]
 
 use std::ops::Add;
 
