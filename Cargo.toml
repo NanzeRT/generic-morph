@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 frunk = "0.4.3"
 frunk_core = "0.4.3"
+morph-proc-macros = { path = "proc-macros" }
 
 [[example]]
 name = "stack_vm"

@@ -1,155 +1,47 @@
 #![feature(trait_alias)]
+#![feature(impl_trait_in_assoc_type)]
 
 use std::ops::Add;
 
-use frunk::{from_generic, hlist::Sculptor, into_generic, Generic};
+use frunk::{from_generic, hlist::Sculptor, Generic};
 
-trait MapHListOnce<G> {
-    fn map_hlist<List>(self, g: List) -> List
+pub use morph_proc_macros::GenericMut;
+
+pub trait CanMorphMut<H, I> = where
+    Self: Sculptor<H, I>,
+    H: Add<<Self as Sculptor<H, I>>::Remainder>;
+
+pub trait CanMorph<'a, H, I> = GenericMut<ReprMut<'a>: CanMorphMut<H, I>> where Self: 'a;
+
+pub trait Morph<'a, H, I> {
+    fn morph<M>(&'a mut self) -> M
     where
-        G: Generic<Repr = List>;
+        M: Generic<Repr = H>;
 }
 
-pub trait MapGenericOnce<Arg, Target, Indeces, Indeces2> {
-    fn map_generic(self, g: Arg) -> Arg;
+#[macro_export]
+macro_rules! HListMut {
+    ($lt:lifetime, $($types:ty),*) => [
+        ::frunk::HList![$(&$lt mut $types),*,]
+    ];
 }
 
-impl<G, T> MapHListOnce<G> for T
+impl<'a, T, H, I> Morph<'a, H, I> for T
 where
-    T: FnOnce(G) -> G,
+    T: CanMorph<'a, H, I>,
 {
-    fn map_hlist<H>(self, h: H) -> H
+    fn morph<M>(&'a mut self) -> M
     where
-        G: Generic<Repr = H>,
+        M: Generic<Repr = H>,
     {
-        let g = from_generic(h);
-        let g = self(g);
-        into_generic(g)
+        let (tar, _rem) = self.into().sculpt();
+        from_generic(tar)
     }
 }
 
-impl<Scul, Scul2, Indeces2, Indeces, Target, T, Arg, G> MapGenericOnce<Arg, G, Indeces, Indeces2>
-    for T
-where
-    Scul: Sculptor<Target, Indeces>,
-    T: MapHListOnce<G>,
-    G: Generic<Repr = Target>,
-    Arg: Generic<Repr = Scul>,
-    Target: Add<Scul::Remainder, Output = Scul2>,
-    Scul2: Sculptor<Scul, Indeces2>,
-{
-    fn map_generic(self, g: Arg) -> Arg {
-        let (target, rem) = into_generic(g).sculpt();
-        let target = self.map_hlist(target);
-        from_generic((target + rem).sculpt().0)
-    }
-}
-
-trait MapHListMut<G> {
-    fn map_hlist<List>(&mut self, g: List) -> List
+pub trait GenericMut {
+    type ReprMut<'a>
     where
-        G: Generic<Repr = List>;
+        Self: 'a;
+    fn into(&mut self) -> Self::ReprMut<'_>;
 }
-
-pub trait MapGenericMut<Arg, Target, Indeces, Indeces2> {
-    fn map_generic(&mut self, g: Arg) -> Arg;
-}
-
-impl<G, T> MapHListMut<G> for T
-where
-    T: FnMut(G) -> G,
-{
-    fn map_hlist<H>(&mut self, h: H) -> H
-    where
-        G: Generic<Repr = H>,
-    {
-        let g = from_generic(h);
-        let g = self(g);
-        into_generic(g)
-    }
-}
-
-impl<Scul, Scul2, Indeces2, Indeces, Target, T, Arg, G> MapGenericMut<Arg, G, Indeces, Indeces2>
-    for T
-where
-    Scul: Sculptor<Target, Indeces>,
-    T: MapHListMut<G>,
-    G: Generic<Repr = Target>,
-    Arg: Generic<Repr = Scul>,
-    Target: Add<Scul::Remainder, Output = Scul2>,
-    Scul2: Sculptor<Scul, Indeces2>,
-{
-    fn map_generic(&mut self, g: Arg) -> Arg {
-        let (target, rem) = into_generic(g).sculpt();
-        let target = self.map_hlist(target);
-        from_generic((target + rem).sculpt().0)
-    }
-}
-
-trait MapHList<G> {
-    fn map_hlist<List>(&self, g: List) -> List
-    where
-        G: Generic<Repr = List>;
-}
-
-pub trait MapGeneric<Arg, Target, Indeces, Indeces2> {
-    fn map_generic(&self, g: Arg) -> Arg;
-}
-
-impl<G, T> MapHList<G> for T
-where
-    T: Fn(G) -> G,
-{
-    fn map_hlist<H>(&self, h: H) -> H
-    where
-        G: Generic<Repr = H>,
-    {
-        let g = from_generic(h);
-        let g = self(g);
-        into_generic(g)
-    }
-}
-
-impl<Scul, Scul2, Indeces2, Indeces, Target, T, Arg, G> MapGeneric<Arg, G, Indeces, Indeces2> for T
-where
-    Scul: Sculptor<Target, Indeces>,
-    T: MapHList<G>,
-    G: Generic<Repr = Target>,
-    Arg: Generic<Repr = Scul>,
-    Target: Add<Scul::Remainder, Output = Scul2>,
-    Scul2: Sculptor<Scul, Indeces2>,
-{
-    fn map_generic(&self, g: Arg) -> Arg {
-        let (target, rem) = into_generic(g).sculpt();
-        let target = self.map_hlist(target);
-        from_generic((target + rem).sculpt().0)
-    }
-}
-
-pub fn wrap_once<S, T, I, I2, F>(fun: F) -> impl FnOnce(S) -> S
-where
-    F: MapGenericOnce<S, T, I, I2>,
-{
-    move |s| fun.map_generic(s)
-}
-
-pub fn wrap_mut<S, T, I, I2, F>(mut fun: F) -> impl FnMut(S) -> S
-where
-    F: MapGenericMut<S, T, I, I2>,
-{
-    move |s| fun.map_generic(s)
-}
-
-pub fn wrap<S, T, I, I2, F>(fun: F) -> impl Fn(S) -> S
-where
-    F: MapGeneric<S, T, I, I2>,
-{
-    move |s| fun.map_generic(s)
-}
-
-pub trait CanMorph<G, H, I, I2> = where
-    Self: Generic,
-    Self::Repr: Sculptor<H, I>,
-    G: Generic<Repr = H>,
-    H: Add<<Self::Repr as Sculptor<H, I>>::Remainder>,
-    H::Output: Sculptor<Self::Repr, I2>;
